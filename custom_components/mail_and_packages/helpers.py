@@ -1,5 +1,7 @@
 """Helper functions for Mail and Packages."""
+from __future__ import annotations
 
+import base64
 import datetime
 import email
 import hashlib
@@ -17,7 +19,7 @@ from shutil import copyfile, copytree, which
 from typing import Any, List, Optional, Type, Union
 
 import aiohttp
-import imageio as io
+from bs4 import BeautifulSoup
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     CONF_HOST,
@@ -27,8 +29,7 @@ from homeassistant.const import (
     CONF_USERNAME,
 )
 from homeassistant.core import HomeAssistant
-from PIL import Image
-from resizeimage import resizeimage
+from PIL import Image, ImageOps
 
 from .const import (
     AMAZON_DELIVERED,
@@ -51,6 +52,7 @@ from .const import (
     AMAZON_PATTERN,
     AMAZON_SHIPMENT_TRACKING,
     AMAZON_TIME_PATTERN,
+    AMAZON_TIME_PATTERN_END,
     ATTR_AMAZON_IMAGE,
     ATTR_BODY,
     ATTR_CODE,
@@ -309,7 +311,6 @@ def hash_file(filename: str) -> str:
 
     # open file for reading in binary mode
     with open(filename, "rb") as file:
-
         # loop till the end of the file
         chunk = 0
         while chunk != b"":
@@ -445,7 +446,7 @@ def selectfolder(account: Type[imaplib.IMAP4_SSL], folder: str) -> bool:
         _LOGGER.error("Error listing folders: %s", str(err))
         return False
     try:
-        account.select(folder)
+        account.select(folder, readonly=True)
     except Exception as err:
         _LOGGER.error("Error selecting folder: %s", str(err))
         return False
@@ -502,14 +503,11 @@ def build_search(address: list, date: str, subject: str = None) -> tuple:
     if subject is not None:
         if not subject.isascii():
             utf8_flag = True
-            # if prefix_list is not None:
-            #     imap_search = f"CHARSET UTF-8 {prefix_list}"
-            #     imap_search = f'{imap_search} FROM "{email_list} {the_date} SUBJECT'
-            # else:
-            #     imap_search = (
-            #         f"CHARSET UTF-8 FROM {email_list} {the_date} SUBJECT"
-            #     )
-            imap_search = f"{the_date} SUBJECT"
+            if prefix_list is not None:
+                imap_search = f'{prefix_list} FROM "{email_list}" {the_date} SUBJECT'
+            else:
+                imap_search = f'FROM "{email_list}" {the_date} SUBJECT'
+            # imap_search = f"{the_date} SUBJECT"
         else:
             if prefix_list is not None:
                 imap_search = f'({prefix_list} FROM "{email_list}" SUBJECT "{subject}" {the_date})'
@@ -534,14 +532,15 @@ def email_search(
     Returns a tuple
     """
     utf8_flag, search = build_search(address, date, subject)
+    value = ("", [""])
 
     if utf8_flag:
         subject = subject.encode("utf-8")
         account.literal = subject
         try:
-            value = account.uid("SEARCH", "CHARSET", "UTF-8", search)
+            value = account.search("utf-8", search)
         except Exception as err:
-            _LOGGER.warning(
+            _LOGGER.debug(
                 "Error searching emails with unicode characters: %s", str(err)
             )
             value = "BAD", err.args[0]
@@ -552,11 +551,11 @@ def email_search(
             _LOGGER.error("Error searching emails: %s", str(err))
             value = "BAD", err.args[0]
 
-    _LOGGER.debug("DEBUG email_search value: %s", value)
+    _LOGGER.debug("email_search value: %s", value)
 
     (check, new_value) = value
     if new_value[0] is None:
-        _LOGGER.warning("DEBUG email_search value was invalid: None")
+        _LOGGER.debug("email_search value was invalid: None")
         value = (check, [b""])
 
     return value
@@ -624,31 +623,66 @@ def get_mails(
     if server_response == "OK":
         _LOGGER.debug("Informed Delivery email found processing...")
         for num in data[0].split():
-            msg = email.message_from_string(
-                email_fetch(account, num, "(RFC822)")[1][0][1].decode("utf-8")
-            )
+            msg = email_fetch(account, num, "(RFC822)")[1]
+            for response_part in msg:
+                if isinstance(response_part, tuple):
+                    msg = email.message_from_bytes(response_part[1])
+                    _LOGGER.debug("msg: %s", msg)
 
-            # walking through the email parts to find images
-            for part in msg.walk():
-                if part.get_content_maintype() == "multipart":
-                    continue
-                if part.get("Content-Disposition") is None:
-                    continue
+                    # walking through the email parts to find images
+                    for part in msg.walk():
+                        if part.get_content_type() == "text/html":
+                            _LOGGER.debug("Found html email processing...")
+                            part = part.get_payload(decode=True)
+                            part = part.decode("utf-8", "ignore")
+                            soup = BeautifulSoup(part, "html.parser")
+                            found_images = soup.find_all(id="mailpiece-image-src-id")
+                            if not found_images:
+                                continue
+                            if "data:image/jpeg;base64" not in part:
+                                _LOGGER.debug("Unexpected html format found.")
+                                continue
+                            _LOGGER.debug("Found images: %s", bool(found_images))
 
-                _LOGGER.debug("Extracting image from email")
+                            # Convert all the images to binary data
+                            for image in found_images:
+                                filename = random_filename()
+                                data = str(image["src"]).split(",")[1]
+                                try:
+                                    with open(
+                                        image_output_path + filename, "wb"
+                                    ) as the_file:
+                                        the_file.write(base64.b64decode(data))
+                                        images.append(image_output_path + filename)
+                                        image_count = image_count + 1
+                                except Exception as err:
+                                    _LOGGER.critical(
+                                        "Error opening filepath: %s", str(err)
+                                    )
+                                    return image_count
 
-                # Log error message if we are unable to open the filepath for
-                # some reason
-                try:
-                    with open(
-                        image_output_path + part.get_filename(), "wb"
-                    ) as the_file:
-                        the_file.write(part.get_payload(decode=True))
-                        images.append(image_output_path + part.get_filename())
-                        image_count = image_count + 1
-                except Exception as err:
-                    _LOGGER.critical("Error opening filepath: %s", str(err))
-                    return image_count
+                        # Log error message if we are unable to open the filepath for
+                        # some reason
+                        elif part.get_content_type() == "image/jpeg":
+                            _LOGGER.debug("Extracting image from email")
+                            filename = part.get_filename()
+                            junkmail = ["mailer", "content"]
+                            if any(junk in filename for junk in junkmail):
+                                _LOGGER.debug("Discarding junk mail.")
+                                continue
+                            try:
+                                with open(
+                                    image_output_path + filename, "wb"
+                                ) as the_file:
+                                    the_file.write(part.get_payload(decode=True))
+                                    images.append(image_output_path + filename)
+                                    image_count = image_count + 1
+                            except Exception as err:
+                                _LOGGER.critical("Error opening filepath: %s", str(err))
+                                return image_count
+
+                        elif part.get_content_type() == "multipart":
+                            continue
 
         # Remove duplicate images
         _LOGGER.debug("Removing duplicate images.")
@@ -689,24 +723,27 @@ def get_mails(
 
             # Create numpy array of images
             _LOGGER.debug("Creating array of image files...")
-            all_images = [io.imread(image) for image in all_images]
+            img, *imgs = [Image.open(file) for file in all_images]
 
             try:
                 _LOGGER.debug("Generating animated GIF")
-                # Use ImageIO to create mail images
-                io.mimwrite(
-                    os.path.join(image_output_path, image_name),
-                    all_images,
-                    duration=gif_duration,
+                # Use Pillow to create mail images
+                img.save(
+                    fp=os.path.join(image_output_path, image_name),
+                    format="GIF",
+                    append_images=imgs,
+                    save_all=True,
+                    duration=gif_duration * 1000,
+                    loop=0,
                 )
-                _LOGGER.info("Mail image generated.")
+                _LOGGER.debug("Mail image generated.")
             except Exception as err:
                 _LOGGER.error("Error attempting to generate image: %s", str(err))
             for image in images_delete:
                 cleanup_images(f"{os.path.split(image)[0]}/", os.path.split(image)[1])
 
         elif image_count == 0:
-            _LOGGER.info("No mail found.")
+            _LOGGER.debug("No mail found.")
             if os.path.isfile(image_output_path + image_name):
                 _LOGGER.debug("Removing " + image_output_path + image_name)
                 cleanup_images(image_output_path, image_name)
@@ -727,6 +764,11 @@ def get_mails(
     return image_count
 
 
+def random_filename(ext: str = ".jpg") -> str:
+    """Generate random filename."""
+    return f"{str(uuid.uuid4())}{ext}"
+
+
 def _generate_mp4(path: str, image_file: str) -> None:
     """Generate mp4 from gif.
 
@@ -745,14 +787,10 @@ def _generate_mp4(path: str, image_file: str) -> None:
     subprocess.call(
         [
             "ffmpeg",
-            "-f",
-            "gif",
             "-i",
             gif_image,
             "-pix_fmt",
             "yuv420p",
-            "-filter:v",
-            "crop='floor(in_w/2)*2:floor(in_h/2)*2'",
             mp4_file,
         ],
         stdout=subprocess.DEVNULL,
@@ -772,7 +810,15 @@ def resize_images(images: list, width: int, height: int) -> list:
             with open(image, "rb") as fd_img:
                 try:
                     img = Image.open(fd_img)
-                    img = resizeimage.resize_contain(img, [width, height])
+                    img.thumbnail((width, height), resample=Image.Resampling.LANCZOS)
+
+                    # Add padding as needed
+                    img = ImageOps.pad(
+                        img, (width, height), method=Image.Resampling.LANCZOS
+                    )
+                    # Crop to size
+                    img = img.crop((0, 0, width, height))
+
                     pre = os.path.splitext(image)[0]
                     image = pre + ".gif"
                     img.save(image, img.format)
@@ -859,7 +905,6 @@ def get_count(
 
     subjects = SENSOR_DATA[sensor_type][ATTR_SUBJECT]
     for subject in subjects:
-
         _LOGGER.debug(
             "Attempting to find mail from (%s) with subject (%s)",
             SENSOR_DATA[sensor_type][ATTR_EMAIL],
@@ -871,9 +916,7 @@ def get_count(
         )
         if server_response == "OK" and data[0] is not None:
             if ATTR_BODY in SENSOR_DATA[sensor_type].keys():
-                count += find_text(
-                    data, account, SENSOR_DATA[sensor_type][ATTR_BODY][0]
-                )
+                count += find_text(data, account, SENSOR_DATA[sensor_type][ATTR_BODY])
             else:
                 count += len(data[0].split())
 
@@ -966,12 +1009,12 @@ def get_tracking(
     return tracking
 
 
-def find_text(sdata: Any, account: Type[imaplib.IMAP4_SSL], search: str) -> int:
+def find_text(sdata: Any, account: Type[imaplib.IMAP4_SSL], search_terms: list) -> int:
     """Filter for specific words in email.
 
     Return count of items found as integer
     """
-    _LOGGER.debug("Searching for (%s) in (%s) emails", search, len(sdata))
+    _LOGGER.debug("Searching for (%s) in (%s) emails", search_terms, len(sdata))
     mail_list = sdata[0].split()
     count = 0
     found = None
@@ -983,19 +1026,20 @@ def find_text(sdata: Any, account: Type[imaplib.IMAP4_SSL], search: str) -> int:
                 msg = email.message_from_bytes(response_part[1])
 
                 for part in msg.walk():
-                    _LOGGER.debug("Content type: %s", part.get_content_type())
-                    if part.get_content_type() not in ["text/html", "text/plain"]:
-                        continue
-                    email_msg = part.get_payload(decode=True)
-                    email_msg = email_msg.decode("utf-8", "ignore")
-                    pattern = re.compile(rf"{search}")
-                    if (found := pattern.findall(email_msg)) and len(found) > 0:
-                        _LOGGER.debug(
-                            "Found (%s) in email %s times.", search, str(len(found))
-                        )
-                        count += len(found)
+                    for search in search_terms:
+                        _LOGGER.debug("Content type: %s", part.get_content_type())
+                        if part.get_content_type() not in ["text/html", "text/plain"]:
+                            continue
+                        email_msg = part.get_payload(decode=True)
+                        email_msg = email_msg.decode("utf-8", "ignore")
+                        pattern = re.compile(rf"{search}")
+                        if (found := pattern.findall(email_msg)) and len(found) > 0:
+                            _LOGGER.debug(
+                                "Found (%s) in email %s times.", search, str(len(found))
+                            )
+                            count += len(found)
 
-    _LOGGER.debug("Search for (%s) count results: %s", search, count)
+    _LOGGER.debug("Search for (%s) count results: %s", search_terms, count)
     return count
 
 
@@ -1176,7 +1220,7 @@ def amazon_hub(account: Type[imaplib.IMAP4_SSL], fwds: Optional[str] = None) -> 
 
 
 def amazon_exception(
-    account: Type[imaplib.IMAP4_SSL], fwds: Optional[str] = None
+    account: Type[imaplib.IMAP4_SSL], fwds: Optional[list] = None
 ) -> dict:
     """Find Amazon exception emails.
 
@@ -1221,6 +1265,61 @@ def amazon_exception(
     return info
 
 
+def amazon_date_search(email_msg: str) -> int:
+    """Search for amazon date strings in email message."""
+    for pattern in AMAZON_TIME_PATTERN_END:
+        if (result := email_msg.find(pattern)) != -1:
+            return result
+    return -1
+
+
+def amazon_date_format(arrive_date: str, lang: str) -> tuple:
+    """Return the date format."""
+    if "de_" in lang:
+        return (arrive_date.split(",", 1)[1].strip(), "%d %B")
+
+    if "today" in arrive_date or "tomorrow" in arrive_date:
+        return (arrive_date.split(",")[1].strip(), "%B %d")
+
+    if arrive_date.endswith(","):
+        return (arrive_date.rstrip(","), "%A, %B %d")
+
+    if "," not in arrive_date:
+        return (arrive_date, "%A %d %B")
+
+    return (arrive_date, "%A, %B %d")
+
+
+def amazon_date_lang(arrive_date: str) -> datetime.datetime | None:
+    """Return the datetime for the date based on language."""
+    time_format = None
+    new_arrive_date = None
+    dateobj = None
+
+    for lang in AMAZON_LANGS:
+        try:
+            locale.setlocale(locale.LC_TIME, lang)
+        except Exception as err:
+            _LOGGER.debug("Locale error: %s (%s)", err, lang)
+            continue
+
+        _LOGGER.debug("Arrive Date: %s", arrive_date)
+        new_arrive_date, time_format = amazon_date_format(arrive_date, lang)
+
+        try:
+            dateobj = datetime.datetime.strptime(new_arrive_date, time_format)
+            _LOGGER.debug("Valid date format found.")
+            break
+        except ValueError as err:
+            _LOGGER.debug(
+                "Invalid date format found for language %s. (%s)",
+                lang,
+                err,
+            )
+            continue
+    return dateobj
+
+
 def get_items(
     account: Type[imaplib.IMAP4_SSL],
     param: str = None,
@@ -1233,7 +1332,7 @@ def get_items(
     """
     _LOGGER.debug("Attempting to find Amazon email with item list ...")
 
-    # Limit to past 3 days (plan to make this configurable)
+    # Limit to past X days
     past_date = datetime.date.today() - datetime.timedelta(days=days)
     tfmt = past_date.strftime("%d-%b-%Y")
     deliveries_today = []
@@ -1279,6 +1378,11 @@ def get_items(
                             )
                         else:
                             email_subject = decode_header(msg["subject"])[0][0]
+
+                        if not isinstance(email_subject, str):
+                            _LOGGER.debug("Converting subject to string.")
+                            email_subject = email_subject.decode("utf-8", "ignore")
+
                         _LOGGER.debug("Amazon Subject: %s", str(email_subject))
                         pattern = re.compile(r"[0-9]{3}-[0-9]{7}-[0-9]{7}")
 
@@ -1299,8 +1403,6 @@ def get_items(
                             continue
                         email_msg = email_msg.decode("utf-8", "ignore")
 
-                        _LOGGER.debug("RAW EMAIL: %s", email_msg)
-
                         # Check message body for order number
                         if (
                             (found := pattern.findall(email_msg))
@@ -1315,62 +1417,23 @@ def get_items(
                                 continue
 
                             start = email_msg.find(search) + len(search)
-                            end = -1
-                            if email_msg.find("Previously expected:") != -1:
-                                end = email_msg.find("Previously expected:")
-                            elif email_msg.find("Track your") != -1:
-                                end = email_msg.find("Track your")
-                            elif email_msg.find("Per tracciare il tuo pacco") != -1:
-                                end = email_msg.find("Per tracciare il tuo pacco")
-                            elif email_msg.find("View or manage order") != -1:
-                                end = email_msg.find("View or manage order")
+                            end = amazon_date_search(email_msg)
 
                             arrive_date = email_msg[start:end].replace(">", "").strip()
                             _LOGGER.debug("First pass: %s", arrive_date)
                             arrive_date = arrive_date.split(" ")
                             arrive_date = arrive_date[0:3]
-                            # arrive_date[2] = arrive_date[2][:3]
                             arrive_date = " ".join(arrive_date).strip()
-                            time_format = None
-                            new_arrive_date = None
 
-                            for lang in AMAZON_LANGS:
-                                try:
-                                    locale.setlocale(locale.LC_TIME, lang)
-                                except Exception as err:
-                                    _LOGGER.info("Locale error: %s (%s)", err, lang)
-                                    continue
+                            # Loop through all the langs for date format
+                            dateobj = amazon_date_lang(arrive_date)
 
-                                _LOGGER.debug("Arrive Date: %s", arrive_date)
-
-                                if "today" in arrive_date or "tomorrow" in arrive_date:
-                                    new_arrive_date = arrive_date.split(",")[1].strip()
-                                    time_format = "%B %d"
-                                elif arrive_date.endswith(","):
-                                    new_arrive_date = arrive_date.rstrip(",")
-                                    time_format = "%A, %B %d"
-                                elif "," not in arrive_date:
-                                    new_arrive_date = arrive_date
-                                    time_format = "%A %d %B"
-                                else:
-                                    new_arrive_date = arrive_date
-                                    time_format = "%A, %B %d"
-
-                                try:
-                                    dateobj = datetime.datetime.strptime(
-                                        new_arrive_date, time_format
-                                    )
-                                except ValueError as err:
-                                    _LOGGER.info(
-                                        "International dates not supported. (%s)", err
-                                    )
-                                    continue
-
-                                if (
-                                    dateobj.day == datetime.date.today().day
-                                    and dateobj.month == datetime.date.today().month
-                                ):
-                                    deliveries_today.append("Amazon Order")
+                            if (
+                                dateobj is not None
+                                and dateobj.day == datetime.date.today().day
+                                and dateobj.month == datetime.date.today().month
+                            ):
+                                deliveries_today.append("Amazon Order")
 
     value = None
     if param == "count":

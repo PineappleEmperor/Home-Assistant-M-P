@@ -1,12 +1,13 @@
-""" Test Mail and Packages Sensor """
+""" Test Mail and Packages sensors."""
+import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.mail_and_packages.const import DOMAIN
 from tests.const import FAKE_CONFIG_DATA_NO_RND
 
 
+@pytest.mark.asyncio
 async def test_sensor(hass, mock_update):
-
     entry = MockConfigEntry(
         domain=DOMAIN,
         title="imap.test.email",
@@ -33,6 +34,7 @@ async def test_sensor(hass, mock_update):
     state = hass.states.get("sensor.mail_usps_delivered")
     assert state
     assert state.state == "3"
+    assert state.attributes["tracking_#"] == ["92123456789012345"]
 
     state = hass.states.get("sensor.mail_usps_delivering")
     assert state
@@ -81,6 +83,7 @@ async def test_sensor(hass, mock_update):
     state = hass.states.get("sensor.mail_amazon_packages_delivered")
     assert state
     assert state.state == "2"
+    assert state.attributes["order"] == ["#123-4567890"]
 
     state = hass.states.get("sensor.mail_dhl_delivered")
     assert state

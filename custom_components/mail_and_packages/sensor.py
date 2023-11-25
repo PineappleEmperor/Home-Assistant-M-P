@@ -4,8 +4,8 @@ https://blog.kalavala.net/usps/homeassistant/mqtt/2018/01/12/usps.html
 Configuration code contribution from @firstof9 https://github.com/firstof9/
 """
 import datetime
-from datetime import timezone
 import logging
+from datetime import timezone
 from typing import Any, Optional
 
 from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
@@ -15,8 +15,10 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
+    AMAZON_EXCEPTION,
     AMAZON_EXCEPTION_ORDER,
     AMAZON_ORDER,
+    AMAZON_DELIVERED,
     ATTR_IMAGE,
     ATTR_IMAGE_NAME,
     ATTR_IMAGE_PATH,
@@ -123,13 +125,18 @@ class PackagesSensor(CoordinatorEntity, SensorEntity):
             return attr
 
         if "Amazon" in self._name:
-            if self._name == "amazon_exception":
+            if self._name == AMAZON_EXCEPTION and AMAZON_EXCEPTION_ORDER in data.keys():
                 attr[ATTR_ORDER] = data[AMAZON_EXCEPTION_ORDER]
-            else:
+            elif self._name == AMAZON_DELIVERED:
+                attr[ATTR_ORDER] = data[AMAZON_DELIVERED]
+            elif AMAZON_ORDER in data.keys():
                 attr[ATTR_ORDER] = data[AMAZON_ORDER]
-        elif self._name == "Mail USPS Mail":
+        elif self._name == "Mail USPS Mail" and ATTR_IMAGE_NAME in data.keys():
             attr[ATTR_IMAGE] = data[ATTR_IMAGE_NAME]
-        elif "_delivering" in self.type and tracking in self.data.keys():
+        elif (
+            any(sensor in self.type for sensor in ["_delivering", "_delivered"])
+            and tracking in data.keys()
+        ):
             attr[ATTR_TRACKING_NUM] = data[tracking]
             # TODO: Add Tracking URL when applicable
         return attr
@@ -179,8 +186,11 @@ class ImagePathSensors(CoordinatorEntity, SensorEntity):
     @property
     def native_value(self) -> Optional[str]:
         """Return the state of the sensor."""
-        image = self.coordinator.data[ATTR_IMAGE_NAME]
+        image = ""
         the_path = None
+
+        if ATTR_IMAGE_NAME in self.coordinator.data.keys():
+            image = self.coordinator.data[ATTR_IMAGE_NAME]
 
         if ATTR_IMAGE_PATH in self.coordinator.data.keys():
             path = self.coordinator.data[ATTR_IMAGE_PATH]
@@ -197,7 +207,7 @@ class ImagePathSensors(CoordinatorEntity, SensorEntity):
             ):
                 the_path = None
             elif self.hass.config.external_url is None:
-                _LOGGER.warning("External URL not set in configuration.")
+                _LOGGER.debug("External URL not set in configuration.")
                 url = self.hass.config.internal_url
                 the_path = f"{url.rstrip('/')}/local/mail_and_packages/{image}"
             else:

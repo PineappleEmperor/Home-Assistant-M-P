@@ -16,6 +16,7 @@ from tests.const import (
 )
 
 
+@pytest.mark.asyncio
 async def test_unload_entry(hass, mock_update, mock_copy_overlays):
     """Test unloading entities."""
     entry = MockConfigEntry(
@@ -28,13 +29,13 @@ async def test_unload_entry(hass, mock_update, mock_copy_overlays):
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
 
-    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 43
+    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 48
     entries = hass.config_entries.async_entries(DOMAIN)
     assert len(entries) == 1
 
     assert await hass.config_entries.async_unload(entries[0].entry_id)
     await hass.async_block_till_done()
-    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 43
+    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 48
     assert len(hass.states.async_entity_ids(DOMAIN)) == 0
 
     assert await hass.config_entries.async_remove(entries[0].entry_id)
@@ -42,6 +43,7 @@ async def test_unload_entry(hass, mock_update, mock_copy_overlays):
     assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 0
 
 
+@pytest.mark.asyncio
 async def test_setup_entry(
     hass,
     mock_imap_no_email,
@@ -65,11 +67,12 @@ async def test_setup_entry(
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
 
-    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 43
+    assert len(hass.states.async_entity_ids(SENSOR_DOMAIN)) == 48
     entries = hass.config_entries.async_entries(DOMAIN)
     assert len(entries) == 1
 
 
+@pytest.mark.asyncio
 async def test_no_path_no_sec(
     hass,
     mock_imap_no_email,
@@ -96,6 +99,7 @@ async def test_no_path_no_sec(
     assert len(entries) == 1
 
 
+@pytest.mark.asyncio
 async def test_missing_imap_timeout(
     hass,
     mock_imap_no_email,
@@ -125,6 +129,7 @@ async def test_missing_imap_timeout(
     assert len(entries) == 1
 
 
+@pytest.mark.asyncio
 async def test_amazon_fwds_string(
     hass,
     mock_imap_no_email,
@@ -154,6 +159,7 @@ async def test_amazon_fwds_string(
     assert len(entries) == 1
 
 
+@pytest.mark.asyncio
 async def test_custom_img(
     hass,
     mock_imap_no_email,
