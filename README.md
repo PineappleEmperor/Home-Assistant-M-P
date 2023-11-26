@@ -21,8 +21,6 @@ The [Mail and Packages integration](https://github.com/PineappleEmperor/Home-Ass
 
 From the original repo:
 - Huge contributions from [@firstof9](https://github.com/firstof9) moving the project forward and keeping it active!
-  <br/>
-  <a href="https://www.buymeacoffee.com/Moralmunky" target="_blank"><img src="/docs/coffee.png" alt="Buy Us A Coffee" height="51px" width="217px" /></a>
 
 ## How it works
 

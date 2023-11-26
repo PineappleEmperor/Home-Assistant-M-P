@@ -435,7 +435,7 @@ SENSOR_DATA = {
         ],
         "body": [
             # "Paketnummer",
-            "",
+            "Your parcel:",
         ],
     },
     "dpd_packages": {},
