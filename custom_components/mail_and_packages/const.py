@@ -73,32 +73,32 @@ DEFAULT_AMAZON_DAYS = 3
 
 # Amazon
 AMAZON_DOMAINS = [
-    "amazon.com",
-    "amazon.ca",
+    # "amazon.com",
+    # "amazon.ca",
     "amazon.co.uk",
-    "amazon.in",
-    "amazon.de",
-    "amazon.it",
-    "amazon.com.au",
-    "amazon.pl",
-    "amazon.es",
-    "amazon.fr",
-    "amazon.ae",
+    # "amazon.in",
+    # "amazon.de",
+    # "amazon.it",
+    # "amazon.com.au",
+    # "amazon.pl",
+    # "amazon.es",
+    # "amazon.fr",
+    # "amazon.ae",
 ]
 AMAZON_DELIVERED_SUBJECT = [
     "Delivered: Your",
-    "Consegna effettuata:",
-    "Dostarczono:",
-    "Geliefert:",
-    "Livré",
-    "Entregado:",
+    # "Consegna effettuata:",
+    # "Dostarczono:",
+    # "Geliefert:",
+    # "Livré",
+    # "Entregado:",
 ]
 AMAZON_SHIPMENT_TRACKING = [
     "shipment-tracking",
-    "conferma-spedizione",
-    "confirmar-envio",
-    "versandbestaetigung",
-    "confirmation-commande",
+    # "conferma-spedizione",
+    # "confirmar-envio",
+    # "versandbestaetigung",
+    # "confirmation-commande",
 ]
 AMAZON_EMAIL = "order-update@"
 AMAZON_PACKAGES = "amazon_packages"
@@ -118,26 +118,27 @@ AMAZON_TIME_PATTERN = [
     "estimated delivery date is:",
     "guaranteed delivery date is:",
     "Arriving:",
-    "Arriverà:",
-    "arriving:",
-    "Dostawa:",
-    "Zustellung:",
-    "Entrega:",
-    "A chegar:",
-    "Arrivée :",
+    "Arriving today:"
+    # "Arriverà:",
+    # "arriving:",
+    # "Dostawa:",
+    # "Zustellung:",
+    # "Entrega:",
+    # "A chegar:",
+    # "Arrivée :",
 ]
 AMAZON_TIME_PATTERN_END = [
     "Previously expected:",
     "This contains",
     "Track your",
-    "Per tracciare il tuo pacco",
+    # "Per tracciare il tuo pacco",
     "View or manage order",
-    "Acompanhar",
-    "Seguimiento",
-    "Verfolge deine(n) Artikel",
-    "Lieferung verfolgen",
-    "Ihr Paket verfolgen",
-    "Suivre",
+    # "Acompanhar",
+    # "Seguimiento",
+    # "Verfolge deine(n) Artikel",
+    # "Lieferung verfolgen",
+    # "Ihr Paket verfolgen",
+    # "Suivre",
 ]
 AMAZON_EXCEPTION_SUBJECT = "Delivery update:"
 AMAZON_EXCEPTION_BODY = "running late"
@@ -145,18 +146,18 @@ AMAZON_EXCEPTION = "amazon_exception"
 AMAZON_EXCEPTION_ORDER = "amazon_exception_order"
 AMAZON_PATTERN = "[0-9]{3}-[0-9]{7}-[0-9]{7}"
 AMAZON_LANGS = [
-    "it_IT",
-    "it_IT.UTF-8",
-    "pl_PL",
-    "pl_PL.UTF-8",
-    "de_DE",
-    "de_DE.UTF-8",
-    "es_ES",
-    "es_ES.UTF-8",
-    "pt_PT",
-    "pt_PT.UTF-8",
-    "pt_BR",
-    "pt_BR.UTF-8",
+    # "it_IT",
+    # "it_IT.UTF-8",
+    # "pl_PL",
+    # "pl_PL.UTF-8",
+    # "de_DE",
+    # "de_DE.UTF-8",
+    # "es_ES",
+    # "es_ES.UTF-8",
+    # "pt_PT",
+    # "pt_PT.UTF-8",
+    # "pt_BR",
+    # "pt_BR.UTF-8",
     "",
 ]
 
@@ -301,14 +302,15 @@ SENSOR_DATA = {
     "hermes_delivering": {
         "email": [
             "donotreply@myhermes.co.uk",
-            "noreply@paketankuendigung.myhermes.de",
+            # "noreply@paketankuendigung.myhermes.de",
         ],
         "subject": [
             "parcel is now with your local Hermes courier",
-            "Ihre Hermes Sendung",
+            # "Ihre Hermes Sendung",
         ],
         "body": [
-            "Voraussichtliche Zustellung",
+            # "Voraussichtliche Zustellung",
+            "",
         ],
     },
     "hermes_packages": {},
@@ -412,21 +414,28 @@ SENSOR_DATA = {
     # DPD
     "dpd_delivered": {
         "email": [
-            "noreply@service.dpd.de",
+            # "noreply@service.dpd.de",
+            "yourdelivery@dpd.co.uk"
         ],
         "subject": [
-            "Ihr Paket ist da!",
+            # "Ihr Paket ist da!",
+            "Great news, your parcel has been delivered",
         ],
     },
     "dpd_delivering": {
         "email": [
-            "noreply@service.dpd.de",
+            # "noreply@service.dpd.de",
+            "yourdelivery@dpd.co.uk",
         ],
         "subject": [
-            "Bald ist ihr DPD Paket da",
+            # "Bald ist ihr DPD Paket da",
+            "Your order will be delivered today between",
+            "will be delivered today",
+            "",
         ],
         "body": [
-            "Paketnummer",
+            # "Paketnummer",
+            "",
         ],
     },
     "dpd_packages": {},
@@ -845,7 +854,7 @@ SENSOR_TYPES: Final[dict[str, SensorEntityDescription]] = {
         icon="mdi:package-variant-closed",
         key="dpd_com_pl_packages",
     ),
-    # DPD
+    # DPD UK
     "dpd_delivering": SensorEntityDescription(
         name="Mail DPD Delivering",
         native_unit_of_measurement="package(s)",

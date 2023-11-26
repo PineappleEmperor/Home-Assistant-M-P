@@ -1,12 +1,13 @@
 {
   "domain": "mail_and_packages",
   "name": "Mail and Packages",
-  "documentation": "https://github.com/moralmunky/Home-Assistant-Mail-And-Packages",
+  "documentation": "https://github.com/PineappleEmperor/Home-Assistant-M-P",
   "issue_tracker": "https://github.com/moralmunky/Home-Assistant-Mail-And-Packages/issues",
   "dependencies": [],
   "codeowners": [
     "@moralmunky",
-    "@firstof9"
+    "@firstof9",
+    "@PineappleEmperor"
   ],
   "config_flow": true,
   "integration_type": "service",
@@ -15,5 +16,5 @@
     "Pillow>=9.0"
   ],
   "iot_class": "cloud_polling",
-  "version": "0.0.0-dev"
+  "version": "1.0"
 }
